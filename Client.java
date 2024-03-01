@@ -4,7 +4,7 @@ import java.net.Socket;
 public class Client {
     public static void main(String[] args) {
         // Server details
-        String serverIP = "10.115.101.134";  // IP address of the server
+        String serverIP = "127.0.0.1";  // IP address of the server
         int serverPort = 12345;         // Port number the server is listening on
 
         try (Socket socket = new Socket(serverIP, serverPort)) {
