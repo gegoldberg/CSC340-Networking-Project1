@@ -12,7 +12,7 @@ import java.util.Scanner;
 
 public class Server {
     private static final int portNumber = 12345;  // Port number for communication
-    private static final int numberOfClients = 2; // Number of clients server will handle
+    private static final int numberOfClients = 5; // Number of clients server will handle
     private static int totalWordCount = 0; // Total word count from all clients
     private static long startTime; // Starting time of server operation
 
