@@ -1,139 +1,83 @@
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 
 public class Server {
-    public static void main(String[] args) {
-        int portNumber = 12345;  
-        int numberOfClients = 5; 
-        String originalFileName = "C:\\Users\\ggold\\OneDrive\\Documents\\CSC340-Project1\\Job.txt";
-        int totalWordCount = 0;  
+    private static final int PORT_NUMBER = 12345;
+    private static final int NUMBER_OF_CLIENTS = 5;
+    private static int totalWordCount = 0; // Counter for total word count from all clients
+    private static long startTime; // Variable to track start time of server
 
-        try (ServerSocket serverSocket = new ServerSocket(portNumber)) {
-            // The server socket is automatically closed when try-with-resources block is exited
-            System.out.println("Server started. Waiting for clients to connect...");
+    public static void main(String[] args) throws IOException, InterruptedException {
+        System.out.println("Enter the file path:"); // Prompt user to enter file path
+        Scanner scanner = new Scanner(System.in);
+        String originalFileName = scanner.nextLine(); // Read file path from user input
+        scanner.close();
 
-            // Read the content of the original file into a byte array
-            byte[] originalFileContent = Files.readAllBytes(Paths.get(originalFileName));
-            int segmentSize = originalFileContent.length / numberOfClients;
-            // Calculate the size of each segment based on the number of clients
-            int lastIndexUsed = 0;  // To keep track of the last index used for segmenting the original file
+        try (ServerSocket serverSocket = new ServerSocket(PORT_NUMBER)) {
+            System.out.println("Server started. Waiting for clients...");
+            byte[] originalFileContent = Files.readAllBytes(Paths.get(originalFileName)); // Read content of the file
+            List<byte[]> segments = divideFileIntoSegments(originalFileContent, NUMBER_OF_CLIENTS); // Divide file into segments
+            List<Thread> threads = new ArrayList<>(); // List to hold client processing threads
+            startTime = System.currentTimeMillis(); // Record start time of server operation
 
-            // Loop through the expected number of clients
-            for (int i = 0; i < numberOfClients; i++) {
-                try (Socket clientSocket = serverSocket.accept()) {
-                    // Accepts a connection from a client
-                    System.out.println("Client connected: " + (i + 1) + "/" + numberOfClients);
-
-                    // Determine the start and end index for the current segment
-                    int startIndex = lastIndexUsed;
-                    int endIndex = i < numberOfClients - 1 ? (i + 1) * segmentSize : originalFileContent.length;
-
-                    // Adjust the end index to ensure words are not split
-                    while (endIndex > startIndex && !isWhiteSpaceOrNewline(originalFileContent[endIndex - 1])) {
-                        endIndex--;
-                    }
-
-                    lastIndexUsed = endIndex;
-
-                    // Extract the segment from the original file content
-                    byte[] segment = extractSegment(originalFileContent, startIndex, endIndex);
-
-                    // Save the segment to a file
-                    String segmentFileName = "segment_" + i + ".txt";
-                    saveToFile(segmentFileName, segment);
-                    // Send the file name to the client
-                    sendFileNameToClient(clientSocket, segmentFileName);
-
-                    // Receive word count from the client
-                    int wordCount = receiveWordCountFromClient(clientSocket);
-
-                    // Process the received word count
-                    if (wordCount != -1) {
-                        System.out.println("Client sent word count: " + wordCount);
-                        totalWordCount += wordCount;
-                    } else {
-                        System.out.println("No word count received, client may have closed the connection.");
-                    }
-
-                    // Print a message indicating client disconnection
-                    System.out.println("Client disconnected.");
-                } catch (IOException e) {
-                    // Handle any errors that may occur with a client connection
-                    handleClientConnectionError(e);
-                }
+            for (int i = 0; i < NUMBER_OF_CLIENTS; i++) {
+                Socket clientSocket = serverSocket.accept(); // Accept client connection
+                System.out.println("Client " + (i + 1) + " connected.");
+                byte[] segment = segments.get(i); // Get corresponding segment for client
+                Thread thread = new Thread(() -> processClient(clientSocket, segment)); // Create a thread to process client
+                threads.add(thread); // Add the thread to list
+                thread.start(); // Start the thread
             }
 
-            // Print the total word count received from all clients
-            System.out.println("Total word count from all clients: " + totalWordCount);
-        } catch (IOException e) {
-            // Handle errors that may occur during server initialization
-            handleServerError(e);
-        }
-    }
-
-    // Helper method to extract a segment from a byte array
-    private static byte[] extractSegment(byte[] fileContent, int startIndex, int endIndex) {
-        int segmentSize = endIndex - startIndex;
-        byte[] segment = new byte[segmentSize];
-        System.arraycopy(fileContent, startIndex, segment, 0, segmentSize);
-        return segment;
-    }
-
-    // Helper method to save a byte array to a file
-    private static void saveToFile(String fileName, byte[] content) {
-        try {
-            Files.write(Paths.get(fileName), content);
-        } catch (IOException e) {
-            System.out.println("Error saving file: " + e.getMessage());
-        }
-    }
-
-    // Helper method to send a file name to the client
-    private static void sendFileNameToClient(Socket clientSocket, String fileName) {
-        try (PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
-            out.println(fileName);
-        } catch (IOException e) {
-            System.out.println("Error sending file name to client: " + e.getMessage());
-        }
-    }
-
-    // Helper method to receive word count from the client
-    private static int receiveWordCountFromClient(Socket clientSocket) {
-        try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            String line = reader.readLine();
-
-            // Check for null or empty line
-            if (line != null && !line.isEmpty()) {
-                return Integer.parseInt(line);
-            } else {
-                System.out.println("Error reading word count from client.");
+            for (Thread thread : threads) {
+                thread.join(); // Wait for all client threads to finish
             }
-        } catch (IOException e) {
-            System.out.println("Error reading word count from client: " + e.getMessage());
+
+            long endTime = System.currentTimeMillis(); // Record end time of server operation
+            System.out.println("Total word count from all clients: " + totalWordCount); // Display total word count
+            System.out.println("Total Time: " + (endTime - startTime) + " milliseconds"); // Display total time taken
+        }
+    }
+
+    // Method to divide the file content into segments
+    private static List<byte[]> divideFileIntoSegments(byte[] fileContent, int numberOfSegments) {
+        List<byte[]> segments = new ArrayList<>(); // List to hold file segments
+        int segmentSize = fileContent.length / numberOfSegments; // Calculate segment size
+        int remainder = fileContent.length % numberOfSegments; // Calculate remainder
+        int start = 0;
+
+        for (int i = 0; i < numberOfSegments; i++) {
+            int end = start + segmentSize + (remainder-- > 0 ? 1 : 0); // Calculate end index for each segment
+            byte[] segment = new byte[end - start]; // Create segment array
+            System.arraycopy(fileContent, start, segment, 0, segment.length); // Copy data to segment array
+            segments.add(segment); // Add segment to the list
+            start = end; // Update start index for next segment
         }
 
-        // Default value or error indicator
-        return -1;
+        return segments; // Return list of segments
     }
 
-    // Helper method to handle client connection errors
-    private static void handleClientConnectionError(IOException e) {
-        System.out.println("An error occurred with a client connection.");
-        e.printStackTrace();
-    }
-
-    // Helper method to handle server errors
-    private static void handleServerError(IOException e) {
-        System.out.println("An error occurred starting the server.");
-        e.printStackTrace();
-    }
-
-    // Helper method to check if a byte represents whitespace or newline
-    private static boolean isWhiteSpaceOrNewline(byte b) {
-        return b == ' ' || b == '\n';
+    // Method to process client requests
+    private static void processClient(Socket clientSocket, byte[] segment) {
+        try {
+            DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream());
+            dos.writeInt(segment.length); // Send segment length to client
+            dos.write(segment); // Send segment data to client
+            dos.flush();
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            totalWordCount += Integer.parseInt(in.readLine()); // Receive word count from client and update total
+            clientSocket.close(); // Close client connection
+        } catch (IOException e) {
+            e.printStackTrace(); // Handle any I/O errors
+        }
     }
 }

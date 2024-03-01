@@ -1,37 +1,52 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 
 public class Client {
     public static void main(String[] args) {
-        // Server information
-        String serverIP = "127.0.0.1";  
-        int serverPort = 12345;      
+        // Server details
+        String serverIP = "127.0.0.1";  // IP address of the server
+        int serverPort = 12345;         // Port number the server is listening on
 
         try (Socket socket = new Socket(serverIP, serverPort)) {
-            // Connect to the server using a Socket
             System.out.println("Connected to server.");
 
-            // Read the file path sent by the server
-            String filePath = new BufferedReader(new InputStreamReader(socket.getInputStream())).readLine();
+            // Receive a segment of data from the server
+            byte[] segmentData = receiveSegment(socket);
+            String tempFileName = "received_segment.txt";
+            // Save the received data to a temporary file
+            saveToFile(tempFileName, segmentData);
 
-            // Calculate the word count of the file using a helper method (not provided)
-            int wordCount = WordCount.wordCount(filePath);
+            // Calculate the word count of the saved file
+            int wordCount = WordCount.wordCount(tempFileName); // Assuming there's a method to count words
             System.out.println("Number of words in the file: " + wordCount);
 
-            // Send the word count back to the server
-            try (PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
-                writer.println(wordCount);
-            }
-
-            // Print a message indicating that the word count has been sent to the server
-            System.out.println("Word count sent to the server.");
-
+            // Send the calculated word count back to the server
+            sendWordCount(socket, wordCount);
         } catch (IOException e) {
-            // Handle any IOException that may occur during the client-server communication
+            // Handle any errors that occur during the process
             e.printStackTrace();
         }
+    }
+
+    // Method to receive a segment of data from the server
+    private static byte[] receiveSegment(Socket socket) throws IOException {
+        DataInputStream dis = new DataInputStream(socket.getInputStream());
+        int length = dis.readInt();
+        byte[] data = new byte[length];
+        dis.readFully(data);
+        return data;
+    }
+
+    // Method to save data to a file
+    private static void saveToFile(String fileName, byte[] data) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(fileName)) {
+            fos.write(data);
+        }
+    }
+
+    // Method to send the word count back to the server
+    private static void sendWordCount(Socket socket, int wordCount) throws IOException {
+        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        out.println(wordCount);
     }
 }
