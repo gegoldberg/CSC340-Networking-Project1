@@ -60,7 +60,7 @@ public class Server {
             }
 
             long endTime = System.currentTimeMillis(); // Record end time of server operation
-            System.out.println("Total word count from all clients: " + (totalWordCount-1)); // Display total word count
+            System.out.println("Total word count from all clients: " + (totalWordCount)); // Display total word count
             System.out.println("Total Time: " + (endTime - startTime) + " milliseconds"); // Display total time taken
         } catch (IOException e) {
             System.out.println("Server exception: " + e.getMessage()); // Server exception handling
